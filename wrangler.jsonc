@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "beyaz-yaka",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  // Ön yüz (dist) aynı Worker'dan sunulur; /api/* önce Worker'a gider.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "beyaz-yaka-db",
+      // `wrangler d1 create beyaz-yaka-db` çıktısındaki kimlik buraya yazılacak.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Firebase projesinin kimliği (Firebase konsolu > Proje ayarları).
+    "FIREBASE_PROJECT_ID": "",
+    "CLAUDE_MODEL": "claude-sonnet-5-5",
+    // Claude Sonnet 5.5 liste fiyatı (USD / milyon token), 10 Kasım 2026'da doğrulandı.
+    "PRICE_IN_PER_MTOK": "2",
+    "PRICE_OUT_PER_MTOK": "10",
+    // Günlük toplam yapay zekâ harcama tavanı (USD). 3 $ x 30 gün = 90 $ < 100 $ aylık bütçe.
+    "DAILY_BUDGET_USD": "3",
+    // Deneme ve abonelik kotaları (maliyet hesabından sonra güncellenecek).
+    "TRIAL_DAYS": "7",
+    "TRIAL_DAILY_AI_CALLS": "8",
+    "SUB_DAILY_AI_CALLS": "60"
+  }
+  // Gizli anahtar: `wrangler secret put ANTHROPIC_API_KEY`
+}
