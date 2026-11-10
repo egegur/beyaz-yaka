@@ -20,7 +20,6 @@ export interface ClaudeResult<T> {
   costUsd: number;
 }
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
 
 export function costOf(env: Env, inputTokens: number, outputTokens: number): number {
   const pin = num(env.PRICE_IN_PER_MTOK, 2);
@@ -38,7 +37,8 @@ export async function callClaudeTool<T>(
   fetcher: typeof fetch = fetch,
 ): Promise<ClaudeResult<T>> {
   if (!env.ANTHROPIC_API_KEY) throw new HttpError(500, 'config', 'Yapay zekâ anahtarı tanımlı değil.');
-  const res = await fetcher(API_URL, {
+  const base = (env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');
+  const res = await fetcher(`${base}/v1/messages`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

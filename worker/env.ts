@@ -10,6 +10,8 @@ export interface Env {
   TRIAL_DAYS: string;
   TRIAL_DAILY_AI_CALLS: string;
   SUB_DAILY_AI_CALLS: string;
+  /** İsteğe bağlı: Claude API adresi (yerel testte sahte sunucu için). Boşsa api.anthropic.com. */
+  ANTHROPIC_BASE_URL?: string;
   /** Yalnızca yerel geliştirme. "1" ise X-Dev-User başlığı kabul edilir. */
   DEV_AUTH?: string;
 }

@@ -33,7 +33,10 @@ export async function verifyFirebaseToken(
 
 /** İstekteki kullanıcıyı döndürür. Geçersizse 401. */
 export async function requireUser(req: Request, env: Env): Promise<string> {
-  if (env.DEV_AUTH === '1') {
+  // Geliştirici girişi yalnızca yerel adreste çalışır; canlıda yanlışlıkla açılsa bile etkisizdir.
+  const host = new URL(req.url).hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  if (env.DEV_AUTH === '1' && isLocal) {
     const dev = req.headers.get('x-dev-user');
     if (dev && /^[a-zA-Z0-9_-]{3,64}$/.test(dev)) return `dev_${dev}`;
   }

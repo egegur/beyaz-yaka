@@ -32,11 +32,11 @@ const fakeFetch = (async (_url: unknown, init?: RequestInit) => {
   );
 }) as typeof fetch;
 
-async function call(method: string, path: string, opts: { user?: string; body?: unknown; now?: number; origin?: string } = {}) {
+async function call(method: string, path: string, opts: { user?: string; body?: unknown; now?: number; origin?: string; host?: string } = {}) {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (opts.user !== '') headers['x-dev-user'] = opts.user ?? 'ayse';
   if (opts.origin) headers.origin = opts.origin;
-  const req = new Request(`https://app.example${path}`, {
+  const req = new Request(`${opts.host ?? 'http://127.0.0.1:8787'}${path}`, {
     method,
     headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
@@ -87,6 +87,11 @@ describe('kimlik ve profil', () => {
     expect(r.status).toBe(401);
   });
 
+  it('geliştirici girişi canlı adreste çalışmaz', async () => {
+    const r = await call('GET', '/api/me', { host: 'https://uygulama.example' });
+    expect(r.status).toBe(401);
+  });
+
   it('ilk girişte 7 günlük deneme başlatır', async () => {
     const r = await call('GET', '/api/me');
     expect(r.status).toBe(200);
@@ -108,7 +113,7 @@ describe('kimlik ve profil', () => {
   it('başka kökenden yazma isteğini canlıda reddeder', async () => {
     const saved = env.DEV_AUTH;
     env.DEV_AUTH = '0';
-    const r = await call('PUT', '/api/me', { user: '', origin: 'https://evil.example', body: {} });
+    const r = await call('PUT', '/api/me', { user: '', origin: 'https://evil.example', host: 'https://uygulama.example', body: {} });
     env.DEV_AUTH = saved;
     expect(r.status).toBe(403);
   });
