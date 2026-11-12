@@ -11,7 +11,8 @@
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply beyaz-yaka-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply beyaz-yaka-db --remote",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:cf": "wrangler d1 migrations apply beyaz-yaka-db --remote && wrangler deploy"
   },
   "dependencies": {
     "react": "^19.3.1",

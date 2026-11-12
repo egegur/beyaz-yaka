@@ -106,6 +106,9 @@ node scripts/kalite-testi.mjs        # ayrı terminalde; rapor test-raporlari/ a
    `wrangler.jsonc` içinde `FIREBASE_PROJECT_ID` değerini doldur.
 4. `npm run deploy`
 
+**Otomatik yayın (Cloudflare Workers Builds, GitHub'a bağlı):** Build komutu `npm run build`, deploy komutu `npm run deploy:cf` (önce veritabanı tablolarını uygular, sonra yayınlar). `main` dalına her yüklemede yayın kendiliğinden yenilenir.
+D1 veritabanı: `beyaz-yaka-db` (12 Kasım 2026'da açıldı, kimlik `wrangler.jsonc`'de).
+
 ## Açık işler
 
 - [ ] Marka adı ve alan adı (TÜRKPATENT kontrolü)

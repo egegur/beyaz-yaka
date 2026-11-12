@@ -14,7 +14,7 @@
       "binding": "DB",
       "database_name": "beyaz-yaka-db",
       // `wrangler d1 create beyaz-yaka-db` çıktısındaki kimlik buraya yazılacak.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "784f8807-047d-438d-b76c-a6f3ee262e0c",
       "migrations_dir": "migrations"
     }
   ],
