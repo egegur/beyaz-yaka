@@ -34,6 +34,10 @@ const CRISIS_PATTERNS: RegExp[] = [
   /\bolsem (daha iyi|kurtulurum)/,
   /\bhayatima son ver/,
   /\bkendime zarar ver/,
+  /\bkendimi bitir/,
+  /\bher seye son ver/,
+  /\byasamaya devam etmek istemiyorum/,
+  /\buyanmasam (keske|daha iyi)/,
 ];
 
 const LEGAL_PATTERNS: RegExp[] = [

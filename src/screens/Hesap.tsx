@@ -79,6 +79,9 @@ export default function Hesap() {
         <p className="small">
           Bu uygulama kariyer koçluğu sunar; hukuki, mali veya psikolojik danışmanlık yerine geçmez. Acil bir durumda 112'yi ara.
         </p>
+        <p className="small">
+          <Link to="/gizlilik">Aydınlatma Metni</Link> · <Link to="/kosullar">Kullanım Koşulları</Link>
+        </p>
       </div>
     </>
   );

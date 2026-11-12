@@ -9,6 +9,7 @@ import Gelisim from './screens/Gelisim';
 import Gunluk from './screens/Gunluk';
 import Hesap from './screens/Hesap';
 import Kayit from './screens/Kayit';
+import Legal from './screens/Legal';
 import KayitDetay from './screens/KayitDetay';
 import Maas from './screens/Maas';
 import Prova from './screens/Prova';
@@ -56,7 +57,11 @@ function Gate() {
 
 function App() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const loc = useLocation();
   useEffect(() => onAuthChange(setSignedIn), []);
+  // Hukuki metinler girişsiz de okunabilir.
+  if (loc.pathname === '/gizlilik') return <Legal doc="gizlilik" />;
+  if (loc.pathname === '/kosullar') return <Legal doc="kosullar" />;
   if (signedIn === null) return <Loading />;
   if (!signedIn) return <Welcome />;
   return (

@@ -72,9 +72,25 @@ Firebase ayarı (`.env`) yoksa uygulama "Geliştirici olarak gir" düğmesiyle a
 Ön yüzde anlık değişiklik için ayrı terminalde `npm run dev` (5173), API isteklerini 8787'ye yönlendirir.
 
 ```bash
-npm test          # 50 test
+npm test          # 54 test
 npm run typecheck
 ```
+
+## Gerçek Claude ile kalite testi
+
+API anahtarı geldiğinde (yaklaşık 0,5 $ harcar):
+
+```bash
+# .dev.vars: ANTHROPIC_API_KEY=<gerçek anahtar>, DEV_AUTH=1, TRIAL_DAILY_AI_CALLS=200
+npm run build && npx wrangler dev --port 8787
+node scripts/kalite-testi.mjs        # ayrı terminalde; rapor test-raporlari/ altına yazılır
+```
+
+25 vaka: 13 kalite (her araç) + 12 kırmızı takım (kriz, hukuk notu, talimat enjeksiyonu, karalama, sahte CV, yaş ayrımcılığı, maaş rakamı ısrarı, siyaset, kişisel veri). Otomatik kontroller kesin hataları yakalar; "İnsan kontrolü" işaretli vakalar elle okunur.
+
+## Hukuki metinler
+
+`src/legal.ts` içinde KVKK aydınlatma metni ve kullanım koşulları **taslağı** var (uygulamada /gizlilik, /kosullar). Avukat kontrol listesi: `LEGAL-NOTLAR.md`.
 
 ## Canlıya alma (patronla birlikte yapılacak adımlar)
 

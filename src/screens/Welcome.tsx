@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { authErrorText, devMode, resetPassword, signInEmail, signInGoogle } from '../auth';
 import { Field, Icon } from '../ui';
 
@@ -62,7 +63,7 @@ export default function Welcome() {
           )}
           {msg && <p role="alert" style={{ color: '#fecaca', margin: 0 }}>{msg}</p>}
           <p className="small" style={{ color: '#aeb8c7', textAlign: 'center' }}>
-            Devam ederek Kullanım Koşulları'nı kabul etmiş ve Aydınlatma Metni'ni okumuş olursun.
+            Devam ederek <Link to="/kosullar">Kullanım Koşulları</Link>'nı kabul etmiş ve <Link to="/gizlilik">Aydınlatma Metni</Link>'ni okumuş olursun.
           </p>
         </div>
       ) : (

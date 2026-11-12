@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { EXPERIENCE_OPTIONS, NEED_OPTIONS } from '../../shared/options';
 import { api } from '../api';
 import { ErrorBox, Field, TopBar, useMe } from '../ui';
@@ -77,7 +77,10 @@ export default function Kayit() {
         </div>
         <label className="check">
           <input type="checkbox" checked={age} onChange={(e) => setAge(e.target.checked)} required />
-          18 yaşından büyüğüm. Bu uygulamanın hukuki, mali veya psikolojik danışmanlık yerine geçmediğini biliyorum.
+          <span>
+            18 yaşından büyüğüm. Bu uygulamanın hukuki, mali veya psikolojik danışmanlık yerine geçmediğini biliyorum.{' '}
+            <Link to="/kosullar">Kullanım Koşulları</Link> · <Link to="/gizlilik">Aydınlatma Metni</Link>
+          </span>
         </label>
         <ErrorBox error={error} />
       </div>

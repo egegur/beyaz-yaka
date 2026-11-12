@@ -15,6 +15,8 @@ describe('kriz algılama', () => {
     'Canıma kıymayı düşündüm',
     'ölsem daha iyi olacak',
     'Hayatıma son vermek istiyorum',
+    'Kendimi bitirmek istiyorum',
+    'Yarın sabah uyanmasam keşke',
   ])('yakalar: %s', (t) => {
     expect(detectCrisis([t])).toBe(true);
   });
@@ -24,6 +26,8 @@ describe('kriz algılama', () => {
     'Yöneticim çok yoğun yaşıyor',
     'Sunumda ölü noktaları düzeltmek istiyorum',
     'Kendimi geliştirmek istiyorum',
+    'Bu projeyi bitirmek istiyorum',
+    'Toplantıya son vermek için ne demeliyim?',
   ])('yanlış alarm vermez: %s', (t) => {
     expect(detectCrisis([t])).toBe(false);
   });
