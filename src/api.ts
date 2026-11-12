@@ -32,7 +32,18 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export const api = {
   me: () => req<Me>('GET', '/api/me'),
-  updateMe: (b: { role?: string; sector?: string; experience?: string; needs?: string[]; ageConfirmed?: boolean }) =>
+  updateMe: (b: {
+    role?: string;
+    sector?: string;
+    experience?: string;
+    needs?: string[];
+    ageConfirmed?: boolean;
+    ageRange?: string;
+    companySize?: string;
+    manages?: string;
+    city?: string;
+    extraDone?: boolean;
+  }) =>
     req<Me>('PUT', '/api/me', b),
   deleteMe: () => req<{ deleted: boolean }>('DELETE', '/api/me'),
   wins: () => req<Win[]>('GET', '/api/wins'),

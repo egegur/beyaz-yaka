@@ -10,6 +10,12 @@ export interface Me {
   sector: string | null;
   experience: string | null;
   needs: string[];
+  ageRange: string | null;
+  companySize: string | null;
+  manages: string | null;
+  city: string | null;
+  /** İsteğe bağlı ikinci kayıt adımı tamamlandı veya atlandı mı? */
+  extraDone: boolean;
   plan: Plan;
   trialEndsAt: number;
   subUntil: number;

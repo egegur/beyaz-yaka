@@ -1,4 +1,5 @@
 import type { ToolId, Win } from '../shared/types';
+import { PREFER_NOT } from '../shared/options';
 import type { ToolSchema } from './claude';
 
 /**
@@ -12,6 +13,7 @@ Kurallar:
 - Her zaman Türkçe yaz. Sade, sıcak ama profesyonel ol. "Sen" diye hitap et.
 - Somut ol: genel öğütler yerine kullanıcının söyleyebileceği cümleler, yapabileceği adımlar ver.
 - Türk iş kültürünü dikkate al (hiyerarşi, nezaket, yüz yüze ilişkinin önemi), ama kalıp yargı kurma.
+- Profil bilgilerini (şirket büyüklüğü, ekip yönetimi, deneyim, yaş aralığı) tavsiyeyi uyarlamak için kullan; yaşa veya şehre dayalı kalıp yargı kurma, kimseyi yaşı nedeniyle bir yoldan caydırma.
 - Rakam, istatistik, maaş tutarı, piyasa verisi veya araştırma sonucu UYDURMA. Kaynağını bilmediğin hiçbir sayı yazma. Maaş konusunda tutar önerme; kullanıcıya güvenilir kaynaklardan aralık araştırmasını öner.
 - Hukuki, mali, tıbbi veya psikolojik kesin hüküm verme. İş hukuku konularında (kıdem/ihbar tazminatı, fesih, mobbing, taciz) genel bilgi ver ve avukata veya ALO 170'e yönlendir.
 - Kullanıcı tükenmişlik, yoğun kaygı veya çaresizlik anlatırsa önce bunu ciddiye al; bir uzmandan destek almasını nazikçe öner. Kendine zarar verme sinyali varsa koçluğu bırak ve 112'yi aramasını söyle.
@@ -40,13 +42,23 @@ export interface ProfileCtx {
   role: string | null;
   sector: string | null;
   experience: string | null;
+  age_range?: string | null;
+  company_size?: string | null;
+  manages?: string | null;
+  city?: string | null;
 }
 
+/** Koça verilen profil bağlamı. "Belirtmek istemiyorum" cevapları gönderilmez. */
 export function profileFields(p: ProfileCtx): Record<string, string> {
+  const v = (x: string | null | undefined) => (x && x !== PREFER_NOT ? x : '');
   return {
-    'Kullanıcının rolü': p.role ?? '',
-    Sektör: p.sector ?? '',
-    Deneyim: p.experience ?? '',
+    'Kullanıcının rolü': v(p.role),
+    Sektör: v(p.sector),
+    Deneyim: v(p.experience),
+    'Yaş aralığı': v(p.age_range),
+    'Şirket büyüklüğü': v(p.company_size),
+    'Ekip yönetimi': v(p.manages) ? (p.manages === 'Hayır' ? 'Ekip yönetmiyor' : `${p.manages} yönetiyor`) : '',
+    Şehir: v(p.city),
   };
 }
 

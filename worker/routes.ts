@@ -17,10 +17,16 @@ import {
   winsBlock,
 } from './prompts';
 import { screen } from './safety';
+import {
+  AGE_OPTIONS,
+  CITY_OPTIONS,
+  COMPANY_SIZE_OPTIONS,
+  EXPERIENCE_OPTIONS,
+  MANAGES_OPTIONS,
+  NEED_OPTIONS,
+} from '../shared/options';
 import { sanitizeCv, sanitizeProva, sanitizeTool } from './sanitize';
 
-export const EXPERIENCE_OPTIONS = ['0–2 yıl', '3–7 yıl', '8–15 yıl', '15+ yıl'];
-export const NEED_OPTIONS = ['Rolümü anlamak', 'Yöneticimle ilişki', 'Kendimi geliştirmek', 'Yükselmek', 'Kariyer değişimi'];
 const MAX_WINS = 500;
 
 export interface Ctx {
@@ -57,21 +63,45 @@ export async function getMe(ctx: Ctx): Promise<Response> {
   return json(await toMe(ctx.env, u, ctx.now));
 }
 
+/** Yalnızca gövdede gelen alanları günceller (kısmi güncelleme). */
 export async function putMe(ctx: Ctx, req: Request): Promise<Response> {
   const body = await readJson(req, 10_000);
-  const u = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
-  const role = str(body, 'role', 120, false) || null;
-  const sector = str(body, 'sector', 80, false) || null;
-  const experience = str(body, 'experience', 20, false) || null;
-  if (experience && !EXPERIENCE_OPTIONS.includes(experience)) throw new HttpError(400, 'bad_field', 'Geçersiz deneyim.');
-  const needsRaw = body.needs;
-  const needs = Array.isArray(needsRaw) ? needsRaw.filter((n): n is string => typeof n === 'string' && NEED_OPTIONS.includes(n)) : [];
-  const ageConfirmed = body.ageConfirmed === true ? 1 : u.age_confirmed;
-  await ctx.env.DB.prepare(
-    'UPDATE users SET role = ?, sector = ?, experience = ?, needs = ?, age_confirmed = ? WHERE id = ?',
-  )
-    .bind(role, sector, experience, JSON.stringify(needs), ageConfirmed, ctx.userId)
-    .run();
+  await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
+  const sets: string[] = [];
+  const vals: (string | number | null)[] = [];
+  const set = (col: string, v: string | number | null) => {
+    sets.push(`${col} = ?`);
+    vals.push(v);
+  };
+  const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+
+  if (has('role')) set('role', str(body, 'role', 120, false) || null);
+  if (has('sector')) set('sector', str(body, 'sector', 80, false) || null);
+  const enumField = (key: string, col: string, options: string[]) => {
+    if (!has(key)) return;
+    const v = str(body, key, 40, false);
+    if (v && !options.includes(v)) throw new HttpError(400, 'bad_field', `Geçersiz seçim: ${key}`);
+    set(col, v || null);
+  };
+  enumField('experience', 'experience', EXPERIENCE_OPTIONS);
+  enumField('ageRange', 'age_range', AGE_OPTIONS);
+  enumField('companySize', 'company_size', COMPANY_SIZE_OPTIONS);
+  enumField('manages', 'manages', MANAGES_OPTIONS);
+  enumField('city', 'city', CITY_OPTIONS);
+  if (has('needs')) {
+    const needs = Array.isArray(body.needs)
+      ? body.needs.filter((n): n is string => typeof n === 'string' && NEED_OPTIONS.includes(n))
+      : [];
+    set('needs', JSON.stringify([...new Set(needs)]));
+  }
+  if (body.ageConfirmed === true) set('age_confirmed', 1);
+  if (body.extraDone === true) set('extra_done', 1);
+
+  if (sets.length) {
+    await ctx.env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
+      .bind(...vals, ctx.userId)
+      .run();
+  }
   const updated = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
   return json(await toMe(ctx.env, updated, ctx.now));
 }

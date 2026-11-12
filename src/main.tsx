@@ -9,6 +9,7 @@ import Gelisim from './screens/Gelisim';
 import Gunluk from './screens/Gunluk';
 import Hesap from './screens/Hesap';
 import Kayit from './screens/Kayit';
+import KayitDetay from './screens/KayitDetay';
 import Maas from './screens/Maas';
 import Prova from './screens/Prova';
 import Rol from './screens/Rol';
@@ -31,10 +32,12 @@ function Gate() {
   }
   if (!me) return <Loading />;
   if (!me.ageConfirmed && loc.pathname !== '/kayit') return <Navigate to="/kayit" replace />;
+  if (me.ageConfirmed && !me.extraDone && loc.pathname !== '/kayit/detay') return <Navigate to="/kayit/detay" replace />;
   return (
     <Routes>
       <Route path="/" element={<Today />} />
       <Route path="/kayit" element={<Kayit />} />
+      <Route path="/kayit/detay" element={<KayitDetay />} />
       <Route path="/birebir" element={<Birebir />} />
       <Route path="/prova" element={<Prova />} />
       <Route path="/gunluk" element={<Gunluk />} />

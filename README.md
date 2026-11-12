@@ -47,6 +47,18 @@ test/        Testler (yerel D1 ile uçtan uca API testleri dahil)
 7. **Veri en aza indirme:** Ad, şirket adı, CV metni ve prova sohbetleri sunucuda saklanmaz. Her araç için son 10 çıktı tutulur. Hesap silme tüm verileri siler.
 8. Geliştirici girişi (`DEV_AUTH`) yalnızca `localhost`/`127.0.0.1` adresinde çalışır.
 
+## Kullanıcı demografisi (toplu istatistik)
+
+Kayıttan sonra isteğe bağlı 4 soru sorulur: yaş aralığı, şirket büyüklüğü, ekip yönetimi, şehir (İstanbul/Ankara/İzmir/Diğer).
+Her soru atlanabilir ve "Belirtmek istemiyorum" seçeneği vardır. Cevaplar koçun önerilerini uyarlar ("Belirtmek istemiyorum" koça gönderilmez).
+
+Raporlarda yalnızca toplu sayılar kullanılır. **10 kişiden küçük gruplar paylaşılmaz** (kişinin tanınmasını önlemek için):
+
+```bash
+npx wrangler d1 execute beyaz-yaka-db --remote --command \
+  "SELECT age_range, company_size, COUNT(*) AS kisi FROM users GROUP BY 1, 2 HAVING kisi >= 10"
+```
+
 ## Yerelde çalıştırma
 
 ```bash
@@ -60,7 +72,7 @@ Firebase ayarı (`.env`) yoksa uygulama "Geliştirici olarak gir" düğmesiyle a
 Ön yüzde anlık değişiklik için ayrı terminalde `npm run dev` (5173), API isteklerini 8787'ye yönlendirir.
 
 ```bash
-npm test          # 46 test
+npm test          # 50 test
 npm run typecheck
 ```
 

@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EXPERIENCE_OPTIONS, NEED_OPTIONS } from '../../shared/options';
 import { api } from '../api';
 import { ErrorBox, Field, TopBar, useMe } from '../ui';
 
 const SECTORS = ['Bankacılık ve finans', 'Teknoloji', 'Perakende', 'Üretim', 'Danışmanlık', 'Sağlık', 'Enerji', 'Medya ve iletişim', 'Kamu dışı diğer'];
-const LEVELS = ['0–2 yıl', '3–7 yıl', '8–15 yıl', '15+ yıl'];
-const NEEDS = ['Rolümü anlamak', 'Yöneticimle ilişki', 'Kendimi geliştirmek', 'Yükselmek', 'Kariyer değişimi'];
+const LEVELS = EXPERIENCE_OPTIONS;
+const NEEDS = NEED_OPTIONS;
 
 export default function Kayit() {
   const { me, refresh } = useMe();
@@ -28,7 +29,7 @@ export default function Kayit() {
     try {
       await api.updateMe({ role: role.trim(), sector, experience: level || undefined, needs, ageConfirmed: age });
       await refresh();
-      navigate('/');
+      navigate(first ? '/kayit/detay' : '/hesap');
     } catch (err) {
       setError(err);
     } finally {

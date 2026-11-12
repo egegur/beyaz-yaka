@@ -10,6 +10,11 @@ export interface UserRow {
   sector: string | null;
   experience: string | null;
   needs: string;
+  age_range: string | null;
+  company_size: string | null;
+  manages: string | null;
+  city: string | null;
+  extra_done: number;
   trial_ends_at: number;
   sub_until: number;
   cv_credits: number;
@@ -74,6 +79,11 @@ export async function toMe(env: Env, u: UserRow, now: number): Promise<Me> {
     sector: u.sector,
     experience: u.experience,
     needs: safeJsonArray(u.needs),
+    ageRange: u.age_range,
+    companySize: u.company_size,
+    manages: u.manages,
+    city: u.city,
+    extraDone: u.extra_done === 1,
     plan,
     trialEndsAt: u.trial_ends_at,
     subUntil: u.sub_until,

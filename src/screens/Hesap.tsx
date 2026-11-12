@@ -40,9 +40,14 @@ export default function Hesap() {
           <span className="small">
             {[me?.sector, me?.experience].filter(Boolean).join(' · ') || 'Sektör ve deneyim girilmedi'}
           </span>
-          <Link to="/kayit" className="btn secondary small" style={{ alignSelf: 'flex-start' }}>
-            Profili düzenle
-          </Link>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <Link to="/kayit" className="btn secondary small">
+              Profili düzenle
+            </Link>
+            <Link to="/kayit/detay" className="btn secondary small">
+              Ek bilgiler
+            </Link>
+          </div>
         </div>
         <div className="card">
           <p className="eyebrow">Plan</p>

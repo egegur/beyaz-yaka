@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getPlatformProxy } from 'wrangler';
 import { dayKey } from '../worker/db';
@@ -19,9 +19,11 @@ const DAY = 86_400_000;
 let claudeCalls = 0;
 let claudeReply: unknown = {};
 let claudeStatus = 200;
+let lastClaudeBody: any = null;
 const fakeFetch = (async (_url: unknown, init?: RequestInit) => {
   claudeCalls++;
   const body = JSON.parse(String(init?.body ?? '{}'));
+  lastClaudeBody = body;
   if (claudeStatus !== 200) return new Response('{}', { status: claudeStatus });
   return new Response(
     JSON.stringify({
@@ -60,12 +62,14 @@ async function onboard(user = 'ayse') {
 beforeAll(async () => {
   proxy = await getPlatformProxy<Env>({ configPath: './wrangler.jsonc', persist: false });
   env = { ...proxy.env, ANTHROPIC_API_KEY: 'test-key', DEV_AUTH: '1', TRIAL_DAILY_AI_CALLS: '3', DAILY_BUDGET_USD: '3' };
-  const sql = readFileSync('migrations/0001_init.sql', 'utf8')
-    .split('\n')
-    .filter((l) => !l.trim().startsWith('--'))
-    .join('\n');
-  for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) {
-    await env.DB.prepare(stmt).run();
+  for (const file of readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort()) {
+    const sql = readFileSync(`migrations/${file}`, 'utf8')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('--'))
+      .join('\n');
+    for (const stmt of sql.split(';').map((s) => s.trim()).filter(Boolean)) {
+      await env.DB.prepare(stmt).run();
+    }
   }
 }, 60_000);
 
@@ -116,6 +120,44 @@ describe('kimlik ve profil', () => {
     const r = await call('PUT', '/api/me', { user: '', origin: 'https://evil.example', host: 'https://uygulama.example', body: {} });
     env.DEV_AUTH = saved;
     expect(r.status).toBe(403);
+  });
+});
+
+describe('isteğe bağlı demografik sorular', () => {
+  it('kısmi güncelleme: yalnızca gelen alanları değiştirir', async () => {
+    await onboard();
+    const r = await call('PUT', '/api/me', {
+      body: { ageRange: '25–34', companySize: '1000+ çalışan', manages: '1–5 kişi', city: 'Belirtmek istemiyorum', extraDone: true },
+    });
+    expect(r.status).toBe(200);
+    expect(r.data.role).toBe('Finans uzmanı');
+    expect(r.data.needs).toEqual(['Yükselmek']);
+    expect(r.data).toMatchObject({ ageRange: '25–34', companySize: '1000+ çalışan', manages: '1–5 kişi', city: 'Belirtmek istemiyorum', extraDone: true });
+  });
+
+  it('atlanınca alanlar boş kalır ama adım tamamlanmış sayılır', async () => {
+    await onboard();
+    const r = await call('PUT', '/api/me', { body: { extraDone: true } });
+    expect(r.data).toMatchObject({ ageRange: null, companySize: null, manages: null, city: null, extraDone: true });
+  });
+
+  it('listede olmayan değeri reddeder', async () => {
+    await onboard();
+    expect((await call('PUT', '/api/me', { body: { ageRange: '29' } })).status).toBe(400);
+    expect((await call('PUT', '/api/me', { body: { city: 'Bursa' } })).status).toBe(400);
+  });
+
+  it('koça profil bağlamını verir, "belirtmek istemiyorum" cevabını göndermez', async () => {
+    await onboard();
+    await call('PUT', '/api/me', { body: { ageRange: '35–44', companySize: '51–250 çalışan', manages: 'Hayır', city: 'Belirtmek istemiyorum' } });
+    claudeReply = { assessment: 'a', risks: [], rewritten: 'b' };
+    await call('POST', '/api/tools/ton', { body: { message: 'Merhaba' } });
+    const content: string = lastClaudeBody.messages[0].content;
+    expect(content).toContain('Şirket büyüklüğü: 51–250 çalışan');
+    expect(content).toContain('Yaş aralığı: 35–44');
+    expect(content).toContain('Ekip yönetimi: Ekip yönetmiyor');
+    expect(content).not.toContain('Belirtmek istemiyorum');
+    expect(content).not.toContain('Şehir:');
   });
 });
 
