@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ErrorBox, Field, Loading, PrivacyHint, ReportButton, SafetyBox, TabBar, useTool } from '../ui';
+import { ErrorBox, Field, Loading, OutputActions, PrivacyHint, SafetyBox, TabBar, usePrefill, useTool } from '../ui';
 
 export default function Yol() {
   const t = useTool('yol');
-  const [fromRole, setFrom] = useState('');
-  const [toRole, setTo] = useState('');
-  const [constraints, setConstraints] = useState('');
-  const [editing, setEditing] = useState(false);
+  const prefill = usePrefill();
+  const [fromRole, setFrom] = useState(prefill.fromRole ?? '');
+  const [toRole, setTo] = useState(prefill.toRole ?? '');
+  const [constraints, setConstraints] = useState(prefill.constraints ?? '');
+  const [editing, setEditing] = useState(Object.keys(prefill).length > 0);
   const [copied, setCopied] = useState(false);
   const o = t.output;
   const showForm = !o || editing;
@@ -90,7 +91,7 @@ export default function Yol() {
                 </span>
                 <span className="small">CV'ni hedef ilana göre ölç, eksik anahtar kelimeleri gör.</span>
               </Link>
-              <ReportButton tool="yol" content={o} />
+              <OutputActions tool={t} />
               <button className="btn secondary" type="button" onClick={() => setEditing(true)}>
                 Yeni plan
               </button>

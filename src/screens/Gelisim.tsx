@@ -1,15 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ErrorBox, Field, Icon, Loading, PrivacyHint, ReportButton, SafetyBox, TopBar, useMe, useTool } from '../ui';
+import { ErrorBox, Field, Icon, Loading, OutputActions, PrivacyHint, SafetyBox, TopBar, useMe, usePrefill, useTool } from '../ui';
 
 const DONE_KEY = 'by_gelisim_done';
 
 export default function Gelisim() {
   const { me } = useMe();
   const t = useTool('gelisim');
-  const [currentRole, setCurrent] = useState(me?.role ?? '');
-  const [targetRole, setTarget] = useState('');
-  const [notes, setNotes] = useState('');
-  const [editing, setEditing] = useState(false);
+  const prefill = usePrefill();
+  const [currentRole, setCurrent] = useState(prefill.currentRole ?? me?.role ?? '');
+  const [targetRole, setTarget] = useState(prefill.targetRole ?? '');
+  const [notes, setNotes] = useState(prefill.notes ?? '');
+  const [editing, setEditing] = useState(Object.keys(prefill).length > 0);
   const [done, setDone] = useState<Record<number, boolean>>(() => {
     try {
       return JSON.parse(localStorage.getItem(DONE_KEY) ?? '{}');
@@ -111,7 +112,7 @@ export default function Gelisim() {
                   </button>
                 ))}
               </div>
-              <ReportButton tool="gelisim" content={o} />
+              <OutputActions tool={t} />
               <button className="btn secondary" type="button" onClick={() => setEditing(true)}>
                 Yeni harita
               </button>

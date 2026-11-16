@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { ProvaTurn, SafetyNotice } from '../../shared/types';
+import type { ProvaMode, ProvaTurn, SafetyNotice } from '../../shared/types';
 import { api } from '../api';
-import { ErrorBox, Field, Icon, PrivacyHint, SafetyBox, TabBar, TopBar, useMe } from '../ui';
+import { ErrorBox, FeedbackBar, Field, Icon, PrivacyHint, SafetyBox, TabBar, TopBar, useMe } from '../ui';
 
 interface Item extends ProvaTurn {
   coach?: { feedback: string; better: string } | null;
@@ -13,9 +13,13 @@ const LEVELS = ['kolay', 'orta', 'zor'];
 export default function Prova() {
   const loc = useLocation();
   const { refresh } = useMe();
-  const preset = (loc.state as { scenario?: string } | null)?.scenario ?? '';
-  const [scenario, setScenario] = useState(preset);
-  const [counterpart, setCounterpart] = useState('Yönetici');
+  const st = (loc.state as { scenario?: string; mode?: ProvaMode; prefill?: Record<string, string> } | null) ?? {};
+  const pre = st.prefill ?? {};
+  const [mode, setMode] = useState<ProvaMode>(st.mode === 'mulakat' ? 'mulakat' : 'konusma');
+  const [scenario, setScenario] = useState(pre.scenario ?? pre.role ?? st.scenario ?? '');
+  const [jobText, setJobText] = useState(pre.jobText ?? '');
+  const [counterpart, setCounterpart] = useState(pre.counterpart ?? 'Yönetici');
+  const who = mode === 'mulakat' ? 'Mülakatçı' : counterpart || 'Karşı taraf';
   const [difficulty, setDifficulty] = useState('orta');
   const [items, setItems] = useState<Item[]>([]);
   const [started, setStarted] = useState(false);
@@ -35,8 +39,10 @@ export default function Prova() {
     try {
       const r = await api.prova({
         scenario,
-        counterpart,
+        counterpart: who,
         difficulty,
+        mode,
+        jobText: mode === 'mulakat' ? jobText : undefined,
         history: history.map(({ role, text }) => ({ role, text })),
       });
       if (!r.ok) {
@@ -86,16 +92,42 @@ export default function Prova() {
   if (!started) {
     return (
       <>
-        <TopBar title="Zor konuşma provası" />
+        <TopBar title={mode === 'mulakat' ? 'Mülakat provası' : 'Zor konuşma provası'} />
         <form className="content with-tabs" onSubmit={start}>
           <h1 className="h-lg">Neyin provasını yapalım?</h1>
-          <p className="muted">Koç karşı tarafın rolüne girer. Cevabın geliştirilebilirse araya girip daha iyi bir cümle önerir.</p>
-          <Field label="Durum">
-            <textarea className="textarea" required maxLength={600} value={scenario} onChange={(e) => setScenario(e.target.value)} placeholder="Ör. Yöneticimden yeni projede sorumluluk istemek" />
-          </Field>
-          <Field label="Karşı taraf">
-            <input className="input" maxLength={60} value={counterpart} onChange={(e) => setCounterpart(e.target.value)} />
-          </Field>
+          <div className="chips" role="radiogroup" aria-label="Prova türü">
+            <button type="button" role="radio" aria-checked={mode === 'konusma'} className="chip" onClick={() => setMode('konusma')}>
+              Zor konuşma
+            </button>
+            <button type="button" role="radio" aria-checked={mode === 'mulakat'} className="chip" onClick={() => setMode('mulakat')}>
+              İş mülakatı
+            </button>
+          </div>
+          <p className="muted">
+            {mode === 'mulakat'
+              ? 'Koç mülakatçı olur, her seferinde tek soru sorar. Cevabın eksikse Durum-Görev-Eylem-Sonuç yapısına göre nasıl güçlendireceğini söyler.'
+              : 'Koç karşı tarafın rolüne girer. Cevabın geliştirilebilirse araya girip daha iyi bir cümle önerir.'}
+          </p>
+          {mode === 'mulakat' ? (
+            <>
+              <Field label="Hangi rol için?">
+                <input className="input" required maxLength={600} value={scenario} onChange={(e) => setScenario(e.target.value)} placeholder="Ör. Kıdemli ürün yöneticisi" />
+              </Field>
+              <Field label="İş ilanı" hint="(isteğe bağlı, sorular buna göre gelir)">
+                <textarea className="textarea" maxLength={4000} value={jobText} onChange={(e) => setJobText(e.target.value)} />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="Durum">
+                <textarea className="textarea" required maxLength={600} value={scenario} onChange={(e) => setScenario(e.target.value)} placeholder="Ör. Yöneticimden yeni projede sorumluluk istemek" />
+              </Field>
+              <Field label="Karşı taraf">
+                <input className="input" maxLength={60} value={counterpart} onChange={(e) => setCounterpart(e.target.value)} />
+              </Field>
+            </>
+          )}
+          <p className="small">Bir prova oturumu günlük hakkından yalnızca 1 sayılır.</p>
           <div className="field">
             <span id="zorluk">Zorluk</span>
             <div className="chips" role="radiogroup" aria-labelledby="zorluk">
@@ -119,7 +151,7 @@ export default function Prova() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       <TopBar
-        title={`Prova: ${counterpart}`}
+        title={mode === 'mulakat' ? 'Mülakat provası' : `Prova: ${who}`}
         back="/"
         right={
           <button className="btn secondary small" type="button" onClick={reset}>
@@ -134,7 +166,7 @@ export default function Prova() {
         {items.map((it, i) => (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className={`bubble ${it.role === 'user' ? 'me' : 'them'}`}>
-              <span className="who">{it.role === 'user' ? 'Sen' : counterpart}</span>
+              <span className="who">{it.role === 'user' ? 'Sen' : who}</span>
               <span className="text">{it.text}</span>
             </div>
             {it.coach && (
@@ -152,15 +184,16 @@ export default function Prova() {
             )}
           </div>
         ))}
-        {busy && <div className="small">{counterpart} yazıyor…</div>}
+        {busy && <div className="small">{who} yazıyor…</div>}
         <SafetyBox notice={notice} />
         <ErrorBox error={error} />
+        {items.filter((x) => x.role === 'user').length >= 2 && !busy && <FeedbackBar tool={mode === 'mulakat' ? 'mulakat' : 'prova'} />}
         <div ref={endRef} />
       </div>
       <form className="sticky-actions" onSubmit={send} style={{ alignItems: 'flex-end' }}>
         <label className="field" style={{ flex: 1 }}>
           <span className="visually-hidden">Cevabın</span>
-          <input className="input" maxLength={1000} value={text} onChange={(e) => setText(e.target.value)} placeholder={`${counterpart}'e ne dersin?`} disabled={busy} />
+          <input className="input" maxLength={1000} value={text} onChange={(e) => setText(e.target.value)} placeholder="Cevabın…" disabled={busy} />
         </label>
         <button className="btn" type="submit" aria-label="Gönder" disabled={busy || !text.trim()} style={{ width: 52, padding: 0 }}>
           <Icon name="send" />

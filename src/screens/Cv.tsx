@@ -2,22 +2,8 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { CvOutput } from '../../shared/types';
 import { api } from '../api';
-import { ErrorBox, Field, ReportButton, TopBar, useMe } from '../ui';
-
-/** PDF'ten metni tarayıcıda çıkarır; dosya sunucuya gönderilmez. */
-async function pdfToText(file: File): Promise<string> {
-  const pdfjs = await import('pdfjs-dist');
-  const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= Math.min(doc.numPages, 6); i++) {
-    const page = await doc.getPage(i);
-    const tc = await page.getTextContent();
-    pages.push(tc.items.map((it) => ('str' in it ? it.str : '')).join(' '));
-  }
-  return pages.join('\n').replace(/[ \t]+/g, ' ').trim();
-}
+import { ErrorBox, FeedbackBar, Field, ReportButton, TopBar, useMe } from '../ui';
+import { pdfToText } from '../pdf';
 
 const METRICS: { key: keyof CvOutput['metrics']; label: string }[] = [
   { key: 'keywords', label: 'Anahtar kelime uyumu' },
@@ -159,6 +145,11 @@ export default function Cv() {
                 <span style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--ink-2)' }}>{tip.body}</span>
               </div>
             ))}
+            <Link className="card" to="/cv-uyarla" style={{ textDecoration: 'none', color: 'var(--ink)' }}>
+              <b>CV'ni ve LinkedIn profilini bu role uyarla</b>
+              <span className="small">Profil özeti, güçlendirilmiş maddeler ve LinkedIn metinleri.</span>
+            </Link>
+            <FeedbackBar tool="cv" />
             <ReportButton tool="cv" content={out} />
           </>
         )}

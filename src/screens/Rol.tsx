@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Bullets, ErrorBox, Field, Loading, PrivacyHint, ReportButton, SafetyBox, TopBar, useMe, useTool } from '../ui';
+import { Bullets, ErrorBox, Field, Loading, OutputActions, PrivacyHint, SafetyBox, TopBar, useMe, usePrefill, useTool } from '../ui';
 
 export default function Rol() {
   const { me } = useMe();
   const t = useTool('rol');
-  const [role, setRole] = useState(me?.role ?? '');
-  const [months, setMonths] = useState('');
-  const [jd, setJd] = useState('');
-  const [editing, setEditing] = useState(false);
+  const prefill = usePrefill();
+  const [role, setRole] = useState(prefill.role ?? me?.role ?? '');
+  const [months, setMonths] = useState(prefill.months ?? '');
+  const [jd, setJd] = useState(prefill.jobDescription ?? '');
+  const [editing, setEditing] = useState(Object.keys(prefill).length > 0);
   const o = t.output;
   const showForm = !o || editing;
 
@@ -73,7 +74,7 @@ export default function Rol() {
                 <p className="eyebrow">Yöneticine sor</p>
                 <Bullets items={o.askManager} />
               </div>
-              <ReportButton tool="rol" content={o} />
+              <OutputActions tool={t} />
             </>
           )
         )}

@@ -2,6 +2,7 @@ import type { Env } from './env';
 import { num } from './env';
 import { HttpError } from './http';
 import { dailyLimitOf, dayKey, planOf, usedToday, type UserRow } from './db';
+import type { Plan } from '../shared/types';
 
 /**
  * İki katmanlı harcama koruması:
@@ -46,4 +47,47 @@ export async function recordSpendOnly(env: Env, now: number, costUsd: number): P
   )
     .bind(dayKey(now), costUsd)
     .run();
+}
+
+export function provaTurnLimit(env: Env, plan: Plan): number {
+  if (plan === 'sub') return num(env.PROVA_DAILY_TURNS_SUB, 150);
+  if (plan === 'trial') return num(env.PROVA_DAILY_TURNS_TRIAL, 30);
+  return 0;
+}
+
+async function assertBudget(env: Env, now: number): Promise<void> {
+  const spent = await env.DB.prepare('SELECT usd FROM spend_daily WHERE day = ?').bind(dayKey(now)).first<{ usd: number }>();
+  if ((spent?.usd ?? 0) >= num(env.DAILY_BUDGET_USD, 3)) {
+    throw new HttpError(503, 'budget', 'Koç bugün için dinlenmede. Lütfen yarın tekrar dene.');
+  }
+}
+
+/**
+ * Prova oturumunun devam turları kullanıcının günlük araç hakkından düşmez (oturumun açılışı 1 hak sayılır).
+ * Kötüye kullanıma karşı turlar ayrı bir günlük sınırla sayılır.
+ */
+export async function assertCanProvaTurn(env: Env, user: UserRow, now: number): Promise<void> {
+  const plan = planOf(user, now);
+  if (plan === 'expired') {
+    throw new HttpError(402, 'trial_ended', 'Deneme süren bitti. Devam etmek için abone olabilirsin.');
+  }
+  const r = await env.DB.prepare('SELECT prova_turns FROM usage_daily WHERE user_id = ? AND day = ?')
+    .bind(user.id, dayKey(now))
+    .first<{ prova_turns: number }>();
+  if ((r?.prova_turns ?? 0) >= provaTurnLimit(env, plan)) {
+    throw new HttpError(429, 'prova_limit', 'Bugünkü prova sınırına ulaştın. Yarın kaldığın yerden devam edebilirsin.');
+  }
+  await assertBudget(env, now);
+}
+
+export async function recordProvaTurn(env: Env, userId: string, now: number, costUsd: number): Promise<void> {
+  const day = dayKey(now);
+  await env.DB.batch([
+    env.DB.prepare(
+      'INSERT INTO usage_daily (user_id, day, calls, prova_turns) VALUES (?, ?, 0, 1) ON CONFLICT(user_id, day) DO UPDATE SET prova_turns = prova_turns + 1',
+    ).bind(userId, day),
+    env.DB.prepare(
+      'INSERT INTO spend_daily (day, usd) VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET usd = usd + excluded.usd',
+    ).bind(day, costUsd),
+  ]);
 }

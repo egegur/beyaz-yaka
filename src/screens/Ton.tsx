@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { Bullets, ErrorBox, Field, PrivacyHint, ReportButton, SafetyBox, TopBar, useTool } from '../ui';
+import { Bullets, ErrorBox, Field, OutputActions, PrivacyHint, SafetyBox, TopBar, usePrefill, useTool } from '../ui';
 
 export default function Ton() {
   const t = useTool('ton');
-  const [message, setMessage] = useState('');
-  const [recipient, setRecipient] = useState('Yöneticim');
+  const prefill = usePrefill();
+  const [message, setMessage] = useState(prefill.message ?? '');
+  const [recipient, setRecipient] = useState(prefill.recipient ?? 'Yöneticim');
   const [copied, setCopied] = useState(false);
   const o = t.output;
 
@@ -57,7 +58,7 @@ export default function Ton() {
                 {copied ? 'Kopyalandı' : 'Kopyala'}
               </button>
             </div>
-            <ReportButton tool="ton" content={o} />
+            <OutputActions tool={t} />
           </>
         )}
       </div>

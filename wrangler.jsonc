@@ -30,7 +30,10 @@
     // Deneme ve abonelik kotaları (maliyet hesabından sonra güncellenecek).
     "TRIAL_DAYS": "7",
     "TRIAL_DAILY_AI_CALLS": "8",
-    "SUB_DAILY_AI_CALLS": "60"
+    "SUB_DAILY_AI_CALLS": "60",
+    // Prova oturumunun açılışı 1 araç hakkı sayılır; devam turları bu ayrı günlük sınırla sayılır.
+    "PROVA_DAILY_TURNS_TRIAL": "30",
+    "PROVA_DAILY_TURNS_SUB": "150"
   }
   // Gizli anahtar: `wrangler secret put ANTHROPIC_API_KEY`
 }

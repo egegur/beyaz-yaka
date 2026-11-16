@@ -29,7 +29,7 @@ export default function Kayit() {
     try {
       await api.updateMe({ role: role.trim(), sector, experience: level || undefined, needs, ageConfirmed: age });
       await refresh();
-      navigate(first ? '/kayit/detay' : '/hesap');
+      navigate(first ? '/' : '/hesap');
     } catch (err) {
       setError(err);
     } finally {

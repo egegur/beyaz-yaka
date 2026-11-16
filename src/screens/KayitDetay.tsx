@@ -45,7 +45,7 @@ export default function KayitDetay() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      {editing ? <TopBar title="Ek bilgiler" back="/hesap" /> : <div style={{ height: 24 }} />}
+      <TopBar title="Ek bilgiler" back={editing ? '/hesap' : '/'} />
       <div className="content">
         <div>
           <h1 className="h-xl">Seni biraz daha tanıyalım</h1>
@@ -77,7 +77,7 @@ export default function KayitDetay() {
       <div className="sticky-actions">
         {!editing && (
           <button className="btn secondary" style={{ flex: 1 }} type="button" disabled={busy} onClick={() => save(true)}>
-            Atla
+            Şimdi değil
           </button>
         )}
         <button className="btn" style={{ flex: 2 }} type="button" disabled={busy} onClick={() => save(false)}>

@@ -1,20 +1,25 @@
-import type { AiResult, CvOutput, ProvaOutput, ProvaTurn, ToolId, ToolOutputs } from '../shared/types';
-import { assertCanCallAi, recordAiUsage, recordSpendOnly } from './budget';
+import type { AiResult, AnlatOutput, CvOutput, HistoryItem, ProvaOutput, ProvaTurn, ToolId, ToolOutputs } from '../shared/types';
+import { assertCanCallAi, assertCanProvaTurn, recordAiUsage, recordProvaTurn, recordSpendOnly } from './budget';
 import { callClaudeTool, costOf } from './claude';
 import { dayKey, getOrCreateUser, recentWins, toMe, toWin, type UserRow } from './db';
 import type { Env } from './env';
 import { num } from './env';
 import { HttpError, json, readJson, str } from './http';
 import {
+  ANLAT_SCHEMA,
+  ANLAT_TASK,
   BASE_SYSTEM,
   CV_SCHEMA,
   CV_TASK,
+  MULAKAT_TASK,
   PROVA_SCHEMA,
   PROVA_TASK,
+  REVIZE_TASK,
   TOOLS,
   dataBlock,
   profileFields,
   winsBlock,
+  type ToolDef,
 } from './prompts';
 import { screen } from './safety';
 import {
@@ -25,7 +30,7 @@ import {
   MANAGES_OPTIONS,
   NEED_OPTIONS,
 } from '../shared/options';
-import { sanitizeCv, sanitizeProva, sanitizeTool } from './sanitize';
+import { sanitizeAnlat, sanitizeCv, sanitizeProva, sanitizeTool } from './sanitize';
 
 const MAX_WINS = 500;
 
@@ -114,6 +119,7 @@ export async function deleteMe(ctx: Ctx): Promise<Response> {
     db.prepare('DELETE FROM outputs WHERE user_id = ?').bind(ctx.userId),
     db.prepare('DELETE FROM usage_daily WHERE user_id = ?').bind(ctx.userId),
     db.prepare('DELETE FROM reports WHERE user_id = ?').bind(ctx.userId),
+    db.prepare('DELETE FROM feedback WHERE user_id = ?').bind(ctx.userId),
     db.prepare('DELETE FROM users WHERE id = ?').bind(ctx.userId),
   ]);
   return json({ deleted: true });
@@ -153,29 +159,28 @@ export function isToolId(id: string): id is ToolId {
   return Object.prototype.hasOwnProperty.call(TOOLS, id);
 }
 
-export async function runTool(
+function stripTags(t: string): string {
+  return t.replace(/<\/?kullanici_verisi>/gi, '');
+}
+
+/** Ortak araç çalıştırma: kota, Claude çağrısı, temizleme, (isteğe bağlı) saklama. */
+async function executeTool<K extends ToolId>(
   ctx: Ctx,
-  toolId: ToolId,
-  req: Request,
-  fetcher: typeof fetch = fetch,
-): Promise<Response> {
-  const def = TOOLS[toolId];
-  const body = await readJson(req, 30_000);
-  const fields: Record<string, string> = {};
-  for (const f of def.fields) fields[f.label] = str(body, f.key, f.max, f.required);
-
-  const { block, note } = screen(Object.values(fields));
-  if (block) return json({ ok: false, notice: block } satisfies AiResult<never>);
-
-  const user = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
-  requireAge(user);
+  toolId: K,
+  user: UserRow,
+  fields: Record<string, string>,
+  extra: string,
+  fetcher: typeof fetch,
+): Promise<ToolOutputs[K]> {
+  const def: ToolDef = TOOLS[toolId];
   await assertCanCallAi(ctx.env, user, ctx.now);
 
   let content = `${def.task}\n\n${dataBlock({ ...profileFields(user), ...fields })}`;
   if (def.useWins) {
     const wins = await recentWins(ctx.env, ctx.userId, 30);
-    content += `\n\nKazanım günlüğü (veri):\n<kullanici_verisi>\n${winsBlock(wins).replace(/<\/?kullanici_verisi>/gi, '')}\n</kullanici_verisi>`;
+    content += `\n\nKazanım günlüğü (veri):\n<kullanici_verisi>\n${stripTags(winsBlock(wins))}\n</kullanici_verisi>`;
   }
+  if (extra) content += `\n\n${extra}`;
 
   const result = await withSpendOnError(ctx, () =>
     callClaudeTool<unknown>(
@@ -187,27 +192,127 @@ export async function runTool(
   await recordAiUsage(ctx.env, ctx.userId, ctx.now, result.costUsd);
   const output = sanitizeTool(toolId, result.data);
 
-  await ctx.env.DB.prepare('INSERT INTO outputs (id, user_id, tool, input, output, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(newId(), ctx.userId, toolId, JSON.stringify(fields), JSON.stringify(output), ctx.now)
-    .run();
-  // Her araç için yalnızca son 10 çıktı tutulur (veri en aza indirme).
-  await ctx.env.DB.prepare(
-    'DELETE FROM outputs WHERE user_id = ? AND tool = ? AND id NOT IN (SELECT id FROM outputs WHERE user_id = ? AND tool = ? ORDER BY created_at DESC LIMIT 10)',
-  )
-    .bind(ctx.userId, toolId, ctx.userId, toolId)
-    .run();
+  if (def.save !== false) {
+    const stored: Record<string, string> = {};
+    for (const f of def.fields) stored[f.label] = fields[f.label] ?? '';
+    await ctx.env.DB.prepare('INSERT INTO outputs (id, user_id, tool, input, output, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(newId(), ctx.userId, toolId, JSON.stringify(stored), JSON.stringify(output), ctx.now)
+      .run();
+    // Her araç için yalnızca son 10 çıktı tutulur (veri en aza indirme).
+    await ctx.env.DB.prepare(
+      'DELETE FROM outputs WHERE user_id = ? AND tool = ? AND id NOT IN (SELECT id FROM outputs WHERE user_id = ? AND tool = ? ORDER BY created_at DESC, rowid DESC LIMIT 10)',
+    )
+      .bind(ctx.userId, toolId, ctx.userId, toolId)
+      .run();
+  }
+  return output;
+}
 
+export async function runTool(
+  ctx: Ctx,
+  toolId: ToolId,
+  req: Request,
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
+  const def = TOOLS[toolId];
+  const body = await readJson(req, 80_000);
+  const fields: Record<string, string> = {};
+  for (const f of def.fields) fields[f.label] = str(body, f.key, f.max, f.required);
+
+  const { block, note } = screen(Object.values(fields));
+  if (block) return json({ ok: false, notice: block } satisfies AiResult<never>);
+
+  const user = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
+  requireAge(user);
+  const output = await executeTool(ctx, toolId, user, fields, '', fetcher);
+  return json({ ok: true, output, notice: note } satisfies AiResult<ToolOutputs[typeof toolId]>);
+}
+
+/**
+ * Takip isteği: kullanıcı önceki çıktıyı tek cümleyle değiştirtir ("daha kısa", "şu itirazı ekle").
+ * Önceki çıktı istemciden gelir ve yeniden temizlenir; aynı yapıda yeni çıktı döner.
+ */
+export async function reviseTool(
+  ctx: Ctx,
+  toolId: ToolId,
+  req: Request,
+  fetcher: typeof fetch = fetch,
+): Promise<Response> {
+  const body = await readJson(req, 40_000);
+  const instruction = str(body, 'instruction', 500);
+  const previous = sanitizeTool(toolId, body.output);
+  const prevJson = JSON.stringify(previous);
+  if (prevJson.length > 20_000) throw new HttpError(413, 'too_large', 'Çıktı çok büyük.');
+
+  const { block, note } = screen([instruction]);
+  if (block) return json({ ok: false, notice: block } satisfies AiResult<never>);
+
+  const user = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
+  requireAge(user);
+  const extra = `${REVIZE_TASK}\n\nÖnceki çıktı (veri):\n<kullanici_verisi>\n${stripTags(prevJson)}\n</kullanici_verisi>\n\nKullanıcının isteği (veri):\n<kullanici_verisi>\n${stripTags(instruction)}\n</kullanici_verisi>`;
+  const output = await executeTool(ctx, toolId, user, {}, extra, fetcher);
   return json({ ok: true, output, notice: note } satisfies AiResult<ToolOutputs[typeof toolId]>);
 }
 
 export async function latestOutput(ctx: Ctx, toolId: ToolId): Promise<Response> {
   const row = await ctx.env.DB.prepare(
-    'SELECT output, created_at FROM outputs WHERE user_id = ? AND tool = ? ORDER BY created_at DESC LIMIT 1',
+    'SELECT output, created_at FROM outputs WHERE user_id = ? AND tool = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
   )
     .bind(ctx.userId, toolId)
     .first<{ output: string; created_at: number }>();
   if (!row) return json(null);
   return json({ output: JSON.parse(row.output), createdAt: row.created_at });
+}
+
+/** Bir aracın son 10 çıktısı (yeniden eskiye). */
+export async function outputHistory(ctx: Ctx, toolId: ToolId): Promise<Response> {
+  const { results } = await ctx.env.DB.prepare(
+    'SELECT id, output, created_at FROM outputs WHERE user_id = ? AND tool = ? ORDER BY created_at DESC, rowid DESC LIMIT 10',
+  )
+    .bind(ctx.userId, toolId)
+    .all<{ id: string; output: string; created_at: number }>();
+  const items: HistoryItem<unknown>[] = results.map((r) => ({ id: r.id, output: JSON.parse(r.output), createdAt: r.created_at }));
+  return json(items);
+}
+
+// ---------- "Ne oluyor, anlat" ----------
+
+export async function runAnlat(ctx: Ctx, req: Request, fetcher: typeof fetch = fetch): Promise<Response> {
+  const body = await readJson(req, 10_000);
+  const text = str(body, 'text', 2000);
+  const { block, note } = screen([text]);
+  if (block) return json({ ok: false, notice: block } satisfies AiResult<never>);
+
+  const user = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
+  requireAge(user);
+  await assertCanCallAi(ctx.env, user, ctx.now);
+  const content = `${ANLAT_TASK}\n\n${dataBlock({ ...profileFields(user), 'Kullanıcının anlattığı': text })}`;
+  const result = await withSpendOnError(ctx, () =>
+    callClaudeTool<unknown>(
+      ctx.env,
+      { system: BASE_SYSTEM, messages: [{ role: 'user', content }], tool: ANLAT_SCHEMA, maxTokens: 1000 },
+      fetcher,
+    ),
+  );
+  await recordAiUsage(ctx.env, ctx.userId, ctx.now, result.costUsd);
+  // Anlatılan metin sunucuda saklanmaz.
+  return json({ ok: true, output: sanitizeAnlat(result.data), notice: note } satisfies AiResult<AnlatOutput>);
+}
+
+// ---------- "İşe yaradı mı?" ----------
+
+const FEEDBACK_TOOLS = [...Object.keys(TOOLS), 'anlat', 'prova', 'mulakat', 'cv'];
+
+export async function feedback(ctx: Ctx, req: Request): Promise<Response> {
+  const body = await readJson(req, 5_000);
+  const tool = str(body, 'tool', 20);
+  if (!FEEDBACK_TOOLS.includes(tool)) throw new HttpError(400, 'bad_field', 'Geçersiz araç.');
+  if (typeof body.useful !== 'boolean') throw new HttpError(400, 'bad_field', 'Geçersiz geri bildirim.');
+  const note = str(body, 'note', 300, false) || null;
+  await ctx.env.DB.prepare('INSERT INTO feedback (id, user_id, tool, useful, note, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(newId(), ctx.userId, tool, body.useful ? 1 : 0, note, ctx.now)
+    .run();
+  return json({ received: true }, 201);
 }
 
 // ---------- Prova (rol yapma) ----------
@@ -229,32 +334,49 @@ export function parseHistory(v: unknown): ProvaTurn[] {
 export async function runProva(ctx: Ctx, req: Request, fetcher: typeof fetch = fetch): Promise<Response> {
   const body = await readJson(req, 60_000);
   const scenario = str(body, 'scenario', 600);
-  const counterpart = str(body, 'counterpart', 60, false) || 'Yönetici';
+  let counterpart = str(body, 'counterpart', 60, false) || 'Yönetici';
   const difficulty = str(body, 'difficulty', 10, false) || 'orta';
   if (!DIFFICULTY.includes(difficulty)) throw new HttpError(400, 'bad_field', 'Geçersiz zorluk.');
+  const mode = str(body, 'mode', 10, false) || 'konusma';
+  if (mode !== 'konusma' && mode !== 'mulakat') throw new HttpError(400, 'bad_field', 'Geçersiz prova türü.');
+  const jobText = mode === 'mulakat' ? str(body, 'jobText', 4000, false) : '';
+  if (mode === 'mulakat') counterpart = 'Mülakatçı';
   const history = parseHistory(body.history);
+  const opening = !history.some((t) => t.role === 'user');
 
   const lastUser = [...history].reverse().find((t) => t.role === 'user')?.text ?? '';
-  const { block, note } = screen([scenario, lastUser]);
+  const { block, note } = screen([scenario, lastUser, jobText]);
   if (block) return json({ ok: false, notice: block } satisfies AiResult<never>);
 
   const user = await getOrCreateUser(ctx.env, ctx.userId, ctx.now);
   requireAge(user);
-  await assertCanCallAi(ctx.env, user, ctx.now);
+  // Oturumun açılışı 1 araç hakkı; devam turları ayrı günlük tur sınırından düşer.
+  if (opening) await assertCanCallAi(ctx.env, user, ctx.now);
+  else await assertCanProvaTurn(ctx.env, user, ctx.now);
 
   const transcript = history.length
     ? history.map((t) => `${t.role === 'user' ? 'Kullanıcı' : counterpart}: ${t.text}`).join('\n')
     : '(Konuşma henüz başlamadı.)';
-  const content = `${dataBlock({ ...profileFields(user), Senaryo: scenario, 'Karşı taraf': counterpart, Zorluk: difficulty })}\n\nKonuşma dökümü (veri):\n<kullanici_verisi>\n${transcript.replace(/<\/?kullanici_verisi>/gi, '')}\n</kullanici_verisi>\n\nŞimdi ${counterpart} olarak bir sonraki repliği ver.`;
+  const ctxFields: Record<string, string> =
+    mode === 'mulakat'
+      ? { ...profileFields(user), 'Mülakat yapılan rol': scenario, 'İş ilanı': jobText, Zorluk: difficulty }
+      : { ...profileFields(user), Senaryo: scenario, 'Karşı taraf': counterpart, Zorluk: difficulty };
+  const content = `${dataBlock(ctxFields)}\n\nKonuşma dökümü (veri):\n<kullanici_verisi>\n${transcript.replace(/<\/?kullanici_verisi>/gi, '')}\n</kullanici_verisi>\n\nŞimdi ${counterpart} olarak bir sonraki repliği ver.`;
 
   const result = await withSpendOnError(ctx, () =>
     callClaudeTool<unknown>(
       ctx.env,
-      { system: `${BASE_SYSTEM}\n\n${PROVA_TASK}`, messages: [{ role: 'user', content }], tool: PROVA_SCHEMA, maxTokens: 600 },
+      {
+        system: `${BASE_SYSTEM}\n\n${mode === 'mulakat' ? MULAKAT_TASK : PROVA_TASK}`,
+        messages: [{ role: 'user', content }],
+        tool: PROVA_SCHEMA,
+        maxTokens: 700,
+      },
       fetcher,
     ),
   );
-  await recordAiUsage(ctx.env, ctx.userId, ctx.now, result.costUsd);
+  if (opening) await recordAiUsage(ctx.env, ctx.userId, ctx.now, result.costUsd);
+  else await recordProvaTurn(ctx.env, ctx.userId, ctx.now, result.costUsd);
   // Prova konuşmaları sunucuda saklanmaz.
   return json({ ok: true, output: sanitizeProva(result.data), notice: note } satisfies AiResult<ProvaOutput>);
 }

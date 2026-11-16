@@ -1,6 +1,9 @@
 // Ön yüz ve arka uç arasında paylaşılan tipler.
 
-export type ToolId = 'rol' | 'birebir' | 'gelisim' | 'maas' | 'yol' | 'ton' | 'terfi';
+export type ToolId = 'rol' | 'birebir' | 'gelisim' | 'maas' | 'yol' | 'ton' | 'terfi' | 'performans' | 'cvuyarla';
+
+/** "Ne oluyor, anlat" ekranının önerebileceği hedefler: araçlar + iki prova türü. */
+export type SuggestTarget = ToolId | 'prova' | 'mulakat';
 export type Plan = 'trial' | 'sub' | 'expired';
 
 export interface Me {
@@ -74,6 +77,21 @@ export interface TerfiOutput {
   gaps: string[];
   nextSteps: string[];
 }
+export interface PerformansOutput {
+  summary: string;
+  achievements: { goal: string; evidence: string }[];
+  growthAreas: { area: string; framing: string }[];
+  questionsToAsk: string[];
+  nextGoals: string[];
+}
+export interface CvUyarlaOutput {
+  headline: string;
+  about: string;
+  cvSummary: string;
+  bulletRewrites: { before: string; after: string }[];
+  skills: string[];
+  warnings: string[];
+}
 export interface ToolOutputs {
   rol: RolOutput;
   birebir: BirebirOutput;
@@ -82,7 +100,28 @@ export interface ToolOutputs {
   yol: YolOutput;
   ton: TonOutput;
   terfi: TerfiOutput;
+  performans: PerformansOutput;
+  cvuyarla: CvUyarlaOutput;
 }
+
+export interface AnlatOutput {
+  /** Koçun durumu nasıl anladığı (1-2 cümle). */
+  understanding: string;
+  /** Hemen yapılabilecek 2-3 adım. */
+  firstSteps: string[];
+  /** En uygun 1-3 araç; prefill, aracın formunu dolduracak değerler. */
+  suggestions: { target: SuggestTarget; why: string; prefill: Record<string, string> }[];
+  /** Durum çok belirsizse tek netleştirme sorusu. */
+  question: string | null;
+}
+
+export interface HistoryItem<T> {
+  id: string;
+  output: T;
+  createdAt: number;
+}
+
+export type ProvaMode = 'konusma' | 'mulakat';
 
 export interface ProvaTurn {
   role: 'user' | 'counterpart';

@@ -6,11 +6,15 @@ import {
   deleteMe,
   deleteWin,
   getMe,
+  feedback,
   isToolId,
   latestOutput,
+  outputHistory,
   listWins,
   putMe,
   report,
+  reviseTool,
+  runAnlat,
   runCv,
   runProva,
   runTool,
@@ -60,11 +64,15 @@ export async function handleApi(
   let m = /^\/api\/wins\/([0-9a-f-]{36})$/.exec(path);
   if (m && method === 'DELETE') return deleteWin(ctx, m[1]);
 
-  m = /^\/api\/tools\/([a-z]+)$/.exec(path);
+  m = /^\/api\/tools\/([a-z]+)(?:\/(revize|gecmis))?$/.exec(path);
   if (m && isToolId(m[1])) {
-    if (method === 'POST') return runTool(ctx, m[1], req, fetcher);
-    if (method === 'GET') return latestOutput(ctx, m[1]);
+    if (m[2] === 'revize' && method === 'POST') return reviseTool(ctx, m[1], req, fetcher);
+    if (m[2] === 'gecmis' && method === 'GET') return outputHistory(ctx, m[1]);
+    if (!m[2] && method === 'POST') return runTool(ctx, m[1], req, fetcher);
+    if (!m[2] && method === 'GET') return latestOutput(ctx, m[1]);
   }
+  if (path === '/api/anlat' && method === 'POST') return runAnlat(ctx, req, fetcher);
+  if (path === '/api/feedback' && method === 'POST') return feedback(ctx, req);
   if (path === '/api/prova' && method === 'POST') return runProva(ctx, req, fetcher);
   if (path === '/api/cv' && method === 'POST') return runCv(ctx, req, fetcher);
   if (path === '/api/report' && method === 'POST') return report(ctx, req);

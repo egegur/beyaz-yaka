@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import type { AiResult, Me, SafetyNotice, ToolId, ToolOutputs } from '../shared/types';
+import { createContext, useCallback, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import type { AiResult, HistoryItem, Me, SafetyNotice, ToolId, ToolOutputs } from '../shared/types';
 import { api, ApiError } from './api';
 
 // ---------- İkonlar (çizgi SVG) ----------
@@ -106,7 +106,7 @@ export function TopBar({ title, back = '/', right }: { title: string; back?: str
 
 const TABS = [
   { to: '/', label: 'Bugün', icon: 'home' },
-  { to: '/prova', label: 'Koç', icon: 'chat' },
+  { to: '/anlat', label: 'Koç', icon: 'chat' },
   { to: '/gunluk', label: 'Günlük', icon: 'pen' },
   { to: '/yol', label: 'Planım', icon: 'map' },
 ];
@@ -309,5 +309,144 @@ export function useTool<K extends ToolId>(id: K) {
       setBusy(false);
     }
   };
-  return { output, notice, error, busy, loadingLatest, run };
+  /** Mevcut çıktıyı tek cümlelik istekle yeniler. */
+  const revise = async (instruction: string): Promise<boolean> => {
+    if (!output) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const r: AiResult<ToolOutputs[K]> = await api.revize(id, output, instruction);
+      refresh();
+      setNotice(r.notice);
+      if (r.ok) {
+        setOutput(r.output);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      setError(e);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { id, output, setOutput, notice, error, busy, loadingLatest, run, revise };
+}
+
+/** Önceki ekrandan (ör. "Ne oluyor, anlat") gelen form değerleri. */
+export function usePrefill(): Record<string, string> {
+  const loc = useLocation();
+  const p = (loc.state as { prefill?: Record<string, string> } | null)?.prefill;
+  return p && typeof p === 'object' ? p : {};
+}
+
+// ---------- Çıktı altı: işe yaradı mı, takip isteği, geçmiş, bildir ----------
+
+export function FeedbackBar({ tool }: { tool: string }) {
+  const [state, setState] = useState<'ask' | 'note' | 'done'>('ask');
+  const [note, setNote] = useState('');
+  const send = async (useful: boolean, n?: string) => {
+    setState('done');
+    try {
+      await api.feedback(tool, useful, n);
+    } catch {
+      /* geri bildirim hatası kullanıcıyı durdurmaz */
+    }
+  };
+  if (state === 'done') return <p className="small">Teşekkürler, geri bildirimin bize yol gösteriyor.</p>;
+  if (state === 'note')
+    return (
+      <div className="card">
+        <Field label="Neyi eksik buldun?" hint="(isteğe bağlı)">
+          <input className="input" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <button type="button" className="btn small" style={{ alignSelf: 'flex-start' }} onClick={() => send(false, note.trim() || undefined)}>
+          Gönder
+        </button>
+      </div>
+    );
+  return (
+    <div className="between" role="group" aria-label="İşe yaradı mı?">
+      <span style={{ fontSize: 14, fontWeight: 700 }}>Bu işine yaradı mı?</span>
+      <span className="row">
+        <button type="button" className="chip" onClick={() => send(true)}>
+          Evet
+        </button>
+        <button type="button" className="chip" onClick={() => setState('note')}>
+          Pek değil
+        </button>
+      </span>
+    </div>
+  );
+}
+
+export function ReviseBox({ busy, onRevise, placeholder }: { busy: boolean; onRevise: (t: string) => Promise<boolean>; placeholder?: string }) {
+  const [text, setText] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    if (await onRevise(t)) setText('');
+  };
+  return (
+    <form className="card" onSubmit={submit}>
+      <Field label="Bunu değiştirelim mi?" hint="(ör. daha kısa olsun, şu itirazı da ekle)">
+        <input className="input" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} />
+      </Field>
+      <button className="btn small secondary" type="submit" disabled={busy || !text.trim()} style={{ alignSelf: 'flex-start' }}>
+        {busy ? 'Yenileniyor…' : 'Uygula'}
+      </button>
+    </form>
+  );
+}
+
+export function HistoryList<K extends ToolId>({ id, onPick }: { id: K; onPick: (o: ToolOutputs[K]) => void }) {
+  const [items, setItems] = useState<HistoryItem<ToolOutputs[K]>[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const load = async () => {
+    setOpen(!open);
+    if (!items) setItems(await api.history(id).catch(() => []));
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <button type="button" className="link-btn" onClick={load} aria-expanded={open}>
+        {open ? 'Önceki çıktıları gizle' : 'Önceki çıktılar'}
+      </button>
+      {open && !items && <Loading />}
+      {open && items && !items.length && <span className="small">Henüz önceki çıktı yok.</span>}
+      {open &&
+        items?.map((it, i) => (
+          <button
+            key={it.id}
+            type="button"
+            className="list-row"
+            style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12, textAlign: 'left', cursor: 'pointer', minHeight: 48 }}
+            onClick={() => {
+              onPick(it.output);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          >
+            <span style={{ flex: 1 }}>
+              {new Date(it.createdAt).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
+              {i === 0 && <span className="small"> · en son</span>}
+            </span>
+            <Icon name="chevron" size={16} />
+          </button>
+        ))}
+    </div>
+  );
+}
+
+/** Her araç çıktısının altına: takip isteği, işe yaradı mı, geçmiş, bildir. */
+export function OutputActions<K extends ToolId>({ tool, history = true }: { tool: ReturnType<typeof useTool<K>> & { id: K }; history?: boolean }) {
+  if (!tool.output) return null;
+  return (
+    <>
+      <ReviseBox busy={tool.busy} onRevise={tool.revise} />
+      <ErrorBox error={tool.error} />
+      <FeedbackBar tool={tool.id} />
+      {history && <HistoryList id={tool.id} onPick={(o) => tool.setOutput(o)} />}
+      <ReportButton tool={tool.id} content={tool.output} />
+    </>
+  );
 }

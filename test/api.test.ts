@@ -61,7 +61,7 @@ async function onboard(user = 'ayse') {
 
 beforeAll(async () => {
   proxy = await getPlatformProxy<Env>({ configPath: './wrangler.jsonc', persist: false });
-  env = { ...proxy.env, ANTHROPIC_API_KEY: 'test-key', DEV_AUTH: '1', TRIAL_DAILY_AI_CALLS: '3', DAILY_BUDGET_USD: '3' };
+  env = { ...proxy.env, ANTHROPIC_API_KEY: 'test-key', DEV_AUTH: '1', TRIAL_DAILY_AI_CALLS: '3', DAILY_BUDGET_USD: '3', PROVA_DAILY_TURNS_TRIAL: '3' };
   for (const file of readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort()) {
     const sql = readFileSync(`migrations/${file}`, 'utf8')
       .split('\n')
@@ -80,7 +80,7 @@ afterAll(async () => {
 beforeEach(async () => {
   claudeCalls = 0;
   claudeStatus = 200;
-  for (const t of ['wins', 'outputs', 'usage_daily', 'spend_daily', 'reports', 'users']) {
+  for (const t of ['wins', 'outputs', 'usage_daily', 'spend_daily', 'reports', 'feedback', 'users']) {
     await env.DB.prepare(`DELETE FROM ${t}`).run();
   }
 });
@@ -309,6 +309,150 @@ describe('hesap silme (KVKK)', () => {
     await call('POST', '/api/wins', { body: { text: 'Bir kazanım' } });
     await call('DELETE', '/api/me');
     const n = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM users) + (SELECT COUNT(*) FROM wins) AS n').first<{ n: number }>();
+    expect(n?.n).toBe(0);
+  });
+});
+
+describe('MVP 0: "Ne oluyor, anlat"', () => {
+  it('durumu anlar, araç önerir; geçersiz hedef ve alanları ayıklar', async () => {
+    await onboard();
+    claudeReply = {
+      understanding: 'Toplantılarda sözün kesiliyor ve görünmez hissediyorsun.',
+      firstSteps: ['Bir sonraki toplantıdan önce söyleyeceğin tek noktayı yaz', 'Yöneticinden birebir iste'],
+      suggestions: [
+        { target: 'birebir', why: 'Durumu yöneticinle konuşmak için', prefill: { goal: 'Toplantılarda daha çok söz almak', hacker: 'x' } },
+        { target: 'prova', why: 'Söz kesildiğinde ne diyeceğini çalış', prefill: { scenario: 'Toplantıda sözümün kesilmesi', counterpart: 'Ekip arkadaşı' } },
+        { target: 'olmayan_arac', why: 'x', prefill: {} },
+      ],
+      question: '',
+    };
+    const r = await call('POST', '/api/anlat', { body: { text: 'Toplantılarda sürekli sözüm kesiliyor, kimse beni dinlemiyor.' } });
+    expect(r.status).toBe(200);
+    expect(r.data.ok).toBe(true);
+    expect(r.data.output.suggestions).toHaveLength(2);
+    expect(r.data.output.suggestions[0].prefill).toEqual({ goal: 'Toplantılarda daha çok söz almak' });
+    expect(r.data.output.question).toBeNull();
+    expect((await call('GET', '/api/me')).data.usedToday).toBe(1);
+    // Anlatılan metin saklanmaz.
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM outputs').first<{ n: number }>();
+    expect(n?.n).toBe(0);
+  });
+
+  it('kriz sinyalinde yapay zekâyı çağırmaz', async () => {
+    await onboard();
+    const r = await call('POST', '/api/anlat', { body: { text: 'İş yüzünden yaşamak istemiyorum' } });
+    expect(r.data.ok).toBe(false);
+    expect(r.data.notice.kind).toBe('crisis');
+    expect(claudeCalls).toBe(0);
+  });
+
+  it('kayıttaki ihtiyaçları koça iletir', async () => {
+    await onboard();
+    claudeReply = { understanding: 'a', firstSteps: [], suggestions: [], question: null };
+    await call('POST', '/api/anlat', { body: { text: 'Terfi istemek istiyorum' } });
+    expect(lastClaudeBody.messages[0].content).toContain('Öncelikli ihtiyaçları: Yükselmek');
+  });
+});
+
+describe('MVP 0: prova kotası ve mülakat', () => {
+  const base = { scenario: 'Sorumluluk istemek', difficulty: 'orta' };
+  it('oturum açılışı 1 hak sayılır, devam turları araç hakkından düşmez', async () => {
+    await onboard();
+    claudeReply = { reply: 'Merhaba', coachNote: null };
+    await call('POST', '/api/prova', { body: { ...base, history: [] } });
+    for (let i = 0; i < 3; i++) {
+      const r = await call('POST', '/api/prova', { body: { ...base, history: [{ role: 'counterpart', text: 'Merhaba' }, { role: 'user', text: `cevap ${i}` }] } });
+      expect(r.status).toBe(200);
+    }
+    expect((await call('GET', '/api/me')).data.usedToday).toBe(1);
+    // Tur sınırı (testte 3) dolunca ayrı uyarı verir.
+    const r = await call('POST', '/api/prova', { body: { ...base, history: [{ role: 'counterpart', text: 'x' }, { role: 'user', text: 'y' }] } });
+    expect(r.status).toBe(429);
+    expect(r.data.error.code).toBe('prova_limit');
+    // Turlar da harcama tavanına yazılır: 4 çağrı x 0,007 $
+    const spend = await env.DB.prepare('SELECT usd FROM spend_daily WHERE day = ?').bind(dayKey(NOW)).first<{ usd: number }>();
+    expect(spend?.usd).toBeCloseTo(0.028, 6);
+  });
+
+  it('mülakat modu mülakatçı talimatını ve ilanı kullanır', async () => {
+    await onboard();
+    claudeReply = { reply: 'Hoş geldiniz. Kendinizden bahseder misiniz?', coachNote: null };
+    const r = await call('POST', '/api/prova', { body: { mode: 'mulakat', scenario: 'Ürün yöneticisi', jobText: 'SQL ve A/B testi deneyimi', history: [] } });
+    expect(r.data.ok).toBe(true);
+    expect(lastClaudeBody.system).toContain('iş mülakatı provası');
+    expect(lastClaudeBody.messages[0].content).toContain('İş ilanı: SQL ve A/B testi deneyimi');
+    expect(lastClaudeBody.messages[0].content).toContain('Mülakatçı olarak');
+  });
+
+  it('geçersiz prova türünü reddeder', async () => {
+    await onboard();
+    expect((await call('POST', '/api/prova', { body: { ...base, mode: 'sinav' } })).status).toBe(400);
+  });
+});
+
+describe('MVP 0: takip isteği ve geçmiş', () => {
+  it('önceki çıktıyı isteğe göre yeniler ve kaydeder', async () => {
+    await onboard();
+    claudeReply = { assessment: 'Sert', risks: ['"Hemen"'], rewritten: 'Uygun olduğunda bakabilir misin?' };
+    const first = await call('POST', '/api/tools/ton', { body: { message: 'Bunu hemen yap' } });
+    claudeReply = { assessment: 'Sert', risks: ['"Hemen"'], rewritten: 'Müsait olduğunda bakar mısın, teşekkürler!' };
+    const r = await call('POST', '/api/tools/ton/revize', { body: { output: first.data.output, instruction: 'Daha samimi olsun' } });
+    expect(r.status).toBe(200);
+    expect(r.data.output.rewritten).toContain('teşekkürler');
+    const content: string = lastClaudeBody.messages[0].content;
+    expect(content).toContain('Daha samimi olsun');
+    expect(content).toContain('Uygun olduğunda bakabilir misin?');
+    const hist = await call('GET', '/api/tools/ton/gecmis');
+    expect(hist.data).toHaveLength(2);
+    expect(hist.data[0].output.rewritten).toContain('teşekkürler');
+    expect((await call('GET', '/api/me')).data.usedToday).toBe(2);
+  });
+
+  it('boş isteği reddeder', async () => {
+    await onboard();
+    expect((await call('POST', '/api/tools/ton/revize', { body: { output: {}, instruction: '' } })).status).toBe(400);
+  });
+
+  it('geçmiş yalnızca kullanıcının kendi çıktılarını gösterir', async () => {
+    await onboard();
+    claudeReply = { assessment: 'a', risks: [], rewritten: 'b' };
+    await call('POST', '/api/tools/ton', { body: { message: 'x' } });
+    expect((await call('GET', '/api/tools/ton/gecmis', { user: 'mehmet' })).data).toHaveLength(0);
+  });
+});
+
+describe('MVP 0: yeni araçlar', () => {
+  it('performans hazırlığı kazanım günlüğünü kullanır', async () => {
+    await onboard();
+    await call('POST', '/api/wins', { body: { text: 'Raporlamayı otomatikleştirdim' } });
+    claudeReply = { summary: 'İyi dönem', achievements: [{ goal: 'Verimlilik', evidence: 'Raporlama otomasyonu' }], growthAreas: [], questionsToAsk: ['?'], nextGoals: [] };
+    const r = await call('POST', '/api/tools/performans', { body: { goals: 'Raporlama sürecini hızlandırmak' } });
+    expect(r.data.output.achievements[0].evidence).toBe('Raporlama otomasyonu');
+    expect(lastClaudeBody.messages[0].content).toContain('Raporlamayı otomatikleştirdim');
+  });
+
+  it('CV uyarlama CV metnini ve çıktısını saklamaz', async () => {
+    await onboard();
+    claudeReply = { headline: 'Finans uzmanı', about: 'a', cvSummary: 'b', bulletRewrites: [{ before: 'x', after: 'y' }], skills: ['Excel'], warnings: [] };
+    const r = await call('POST', '/api/tools/cvuyarla', { body: { cvText: 'GİZLİ CV METNİ '.repeat(20), target: 'Finans müdürü' } });
+    expect(r.data.output.headline).toBe('Finans uzmanı');
+    const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM outputs').first<{ n: number }>();
+    expect(n?.n).toBe(0);
+    expect((await call('GET', '/api/tools/cvuyarla')).data).toBeNull();
+  });
+});
+
+describe('MVP 0: "İşe yaradı mı?"', () => {
+  it('geri bildirimi kaydeder, hesap silinince siler', async () => {
+    await onboard();
+    expect((await call('POST', '/api/feedback', { body: { tool: 'birebir', useful: true } })).status).toBe(201);
+    expect((await call('POST', '/api/feedback', { body: { tool: 'anlat', useful: false, note: 'Çok genel' } })).status).toBe(201);
+    expect((await call('POST', '/api/feedback', { body: { tool: 'yok', useful: true } })).status).toBe(400);
+    expect((await call('POST', '/api/feedback', { body: { tool: 'ton', useful: 'evet' } })).status).toBe(400);
+    let n = await env.DB.prepare('SELECT COUNT(*) AS n FROM feedback').first<{ n: number }>();
+    expect(n?.n).toBe(2);
+    await call('DELETE', '/api/me');
+    n = await env.DB.prepare('SELECT COUNT(*) AS n FROM feedback').first<{ n: number }>();
     expect(n?.n).toBe(0);
   });
 });

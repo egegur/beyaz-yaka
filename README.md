@@ -33,7 +33,10 @@ test/        Testler (yerel D1 ile uçtan uca API testleri dahil)
 ## Özellikler
 
 - **Beş alan:** Rolümü anlamak · Yöneticimle ilişki (birebir hazırlığı, zor konuşma provası) · Kendimi geliştirmek (beceri açığı haritası, aylık plan) · Yükselmek (maaş görüşmesi, kazanım günlüğü → terfi dosyası) · Kariyer değişimi (yol haritası).
-- **Ek araçlar:** Mesaj tonu kontrolü; **ATS CV skoru (ücretli, hak ile çalışır)**.
+- **Ek araçlar:** Performans değerlendirmesi hazırlığı, mülakat provası, CV ve LinkedIn uyarlama, mesaj tonu kontrolü; **ATS CV skoru (ücretli, hak ile çalışır)**.
+- **"Ne oluyor, anlat" (MVP 0):** Kullanıcı durumunu serbestçe yazar; koç kısa değerlendirme, hemen yapılabilecek adımlar ve formu doldurulmuş 1-3 araç önerir. Ana ekranın ve "Koç" sekmesinin merkezinde. Anlatılan metin saklanmaz.
+- **Her çıktının altında:** takip isteği ("daha kısa olsun" gibi tek cümleyle yenileme), "Bu işine yaradı mı?", önceki çıktılar (son 10), bildir.
+- **Kişiselleştirme:** Kayıtta seçilen ihtiyaç alanları ana ekranda öne çıkar ve koça iletilir. Demografik sorular zorunlu adım değil, ana ekranda isteğe bağlı kart.
 - Tüm cevaplar yapılandırılmış çıktı olarak gelir (Claude'a araç kullanımı zorunlu tutulur), ekrana gitmeden önce şekle sokulur.
 
 ## Güvenlik ve maliyet korumaları
@@ -42,7 +45,7 @@ test/        Testler (yerel D1 ile uçtan uca API testleri dahil)
 2. **İş hukuku notu:** Kıdem/ihbar tazminatı, fesih, mobbing gibi konularda çıktıya avukat ve ALO 170 notu eklenir.
 3. **Sistem talimatı:** Rakam/maaş uydurmama, CV'de deneyim uydurtmama, kapsam dışı konuları reddetme, kullanıcı metnini talimat saymama.
 4. **18+ onayı** olmadan yapay zekâ araçları çalışmaz.
-5. **Kota:** Deneme 7 gün, günde 8 çağrı; abone günde 60 çağrı (`wrangler.jsonc` → `vars`).
+5. **Kota:** Deneme 7 gün, günde 8 çağrı; abone günde 60 çağrı (`wrangler.jsonc` → `vars`). Prova/mülakat oturumunun açılışı 1 çağrı sayılır; devam turları ayrı günlük sınırla sayılır (deneme 30, abone 150 tur).
 6. **Günlük harcama tavanı:** Tüm uygulama için günde 3 $ (≈ 90 $/ay). Dolunca yapay zekâ o gün durur.
 7. **Veri en aza indirme:** Ad, şirket adı, CV metni ve prova sohbetleri sunucuda saklanmaz. Her araç için son 10 çıktı tutulur. Hesap silme tüm verileri siler.
 8. Geliştirici girişi (`DEV_AUTH`) yalnızca `localhost`/`127.0.0.1` adresinde çalışır.
@@ -59,6 +62,13 @@ npx wrangler d1 execute beyaz-yaka-db --remote --command \
   "SELECT age_range, company_size, COUNT(*) AS kisi FROM users GROUP BY 1, 2 HAVING kisi >= 10"
 ```
 
+## "İşe yaradı mı?" geri bildirimi
+
+```bash
+npx wrangler d1 execute beyaz-yaka-db --remote --command \
+  "SELECT tool, COUNT(*) AS cevap, ROUND(100.0 * SUM(useful) / COUNT(*)) AS yarar_yuzdesi FROM feedback GROUP BY tool ORDER BY cevap DESC"
+```
+
 ## Yerelde çalıştırma
 
 ```bash
@@ -72,13 +82,13 @@ Firebase ayarı (`.env`) yoksa uygulama "Geliştirici olarak gir" düğmesiyle a
 Ön yüzde anlık değişiklik için ayrı terminalde `npm run dev` (5173), API isteklerini 8787'ye yönlendirir.
 
 ```bash
-npm test          # 54 test
+npm test          # 66 test
 npm run typecheck
 ```
 
 ## Gerçek Claude ile kalite testi
 
-API anahtarı geldiğinde (yaklaşık 0,5 $ harcar):
+API anahtarı geldiğinde (yaklaşık 0,6 $ harcar):
 
 ```bash
 # .dev.vars: ANTHROPIC_API_KEY=<gerçek anahtar>, DEV_AUTH=1, TRIAL_DAILY_AI_CALLS=200
@@ -86,7 +96,7 @@ npm run build && npx wrangler dev --port 8787
 node scripts/kalite-testi.mjs        # ayrı terminalde; rapor test-raporlari/ altına yazılır
 ```
 
-25 vaka: 13 kalite (her araç) + 12 kırmızı takım (kriz, hukuk notu, talimat enjeksiyonu, karalama, sahte CV, yaş ayrımcılığı, maaş rakamı ısrarı, siyaset, kişisel veri). Otomatik kontroller kesin hataları yakalar; "İnsan kontrolü" işaretli vakalar elle okunur.
+30 vaka: 18 kalite (her araç, "Ne oluyor, anlat", mülakat) + 12 kırmızı takım (kriz, hukuk notu, talimat enjeksiyonu, karalama, sahte CV, yaş ayrımcılığı, maaş rakamı ısrarı, siyaset, kişisel veri). Otomatik kontroller kesin hataları yakalar; "İnsan kontrolü" işaretli vakalar elle okunur.
 
 ## Hukuki metinler
 

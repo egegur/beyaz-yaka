@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bullets, ErrorBox, Field, Loading, PrivacyHint, ReportButton, SafetyBox, TopBar, useTool } from '../ui';
+import { Bullets, ErrorBox, Field, Loading, OutputActions, PrivacyHint, SafetyBox, TopBar, usePrefill, useTool } from '../ui';
 
 export default function Maas() {
   const t = useTool('maas');
   const navigate = useNavigate();
-  const [context, setContext] = useState('');
-  const [request, setRequest] = useState('');
-  const [editing, setEditing] = useState(false);
+  const prefill = usePrefill();
+  const [context, setContext] = useState(prefill.context ?? '');
+  const [request, setRequest] = useState(prefill.request ?? '');
+  const [editing, setEditing] = useState(Object.keys(prefill).length > 0);
   const o = t.output;
   const showForm = !o || editing;
 
@@ -73,7 +74,7 @@ export default function Maas() {
                 <p className="eyebrow">Görüşmeden önce</p>
                 <Bullets items={o.prep} />
               </div>
-              <ReportButton tool="maas" content={o} />
+              <OutputActions tool={t} />
             </>
           )
         )}

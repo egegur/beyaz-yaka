@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Win } from '../../shared/types';
 import { api } from '../api';
-import { Bullets, ErrorBox, Field, Icon, Loading, ReportButton, SafetyBox, TabBar, useTool } from '../ui';
+import { Bullets, ErrorBox, Field, Icon, Loading, OutputActions, SafetyBox, TabBar, useTool } from '../ui';
 
 const TAGS = ['Verimlilik', 'Liderlik', 'Müşteri', 'Ekip çalışması', 'Rakamlı etki', 'Öğrenme'];
 
@@ -115,9 +115,9 @@ export default function Gunluk() {
                 <Bullets items={t.nextSteps} />
               </>
             )}
-            <ReportButton tool="terfi" content={t} />
           </div>
         )}
+        {t && <OutputActions tool={terfi} />}
 
         <h2 className="eyebrow">Kayıtlar</h2>
         {!wins ? (

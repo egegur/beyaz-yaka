@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ErrorBox, Field, Loading, PrivacyHint, ReportButton, SafetyBox, TopBar, useTool } from '../ui';
+import { ErrorBox, Field, Loading, OutputActions, PrivacyHint, SafetyBox, TopBar, usePrefill, useTool } from '../ui';
 
 export default function Birebir() {
   const t = useTool('birebir');
   const navigate = useNavigate();
-  const [goal, setGoal] = useState('');
-  const [context, setContext] = useState('');
+  const prefill = usePrefill();
+  const [goal, setGoal] = useState(prefill.goal ?? '');
+  const [context, setContext] = useState(prefill.context ?? '');
   const [minutes, setMinutes] = useState('30');
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(!!prefill.goal);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -79,7 +80,7 @@ export default function Birebir() {
                   <span style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--ink-2)' }}>{x.response}</span>
                 </div>
               ))}
-              <ReportButton tool="birebir" content={o} />
+              <OutputActions tool={t} />
             </>
           )
         )}

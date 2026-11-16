@@ -1,4 +1,5 @@
-import type { CvOutput, ProvaOutput, ToolId, ToolOutputs } from '../shared/types';
+import type { AnlatOutput, CvOutput, ProvaOutput, SuggestTarget, ToolId, ToolOutputs } from '../shared/types';
+import { ANLAT_CATALOG } from './prompts';
 
 /**
  * Yapay zekâ çıktısını ekrana gitmeden önce şekle sokar.
@@ -75,6 +76,23 @@ export function sanitizeTool<K extends ToolId>(id: K, raw: unknown): ToolOutputs
         gaps: sa(r.gaps, 6),
         nextSteps: sa(r.nextSteps, 6),
       } as ToolOutputs[K];
+    case 'performans':
+      return {
+        summary: s(r.summary, 1000),
+        achievements: objs(r.achievements, 8).map((a) => ({ goal: s(a.goal, 300), evidence: s(a.evidence, 500) })),
+        growthAreas: objs(r.growthAreas, 5).map((g) => ({ area: s(g.area, 200), framing: s(g.framing, 500) })),
+        questionsToAsk: sa(r.questionsToAsk, 5),
+        nextGoals: sa(r.nextGoals, 5),
+      } as ToolOutputs[K];
+    case 'cvuyarla':
+      return {
+        headline: s(r.headline, 220),
+        about: s(r.about, 2600),
+        cvSummary: s(r.cvSummary, 1000),
+        bulletRewrites: objs(r.bulletRewrites, 8).map((b) => ({ before: s(b.before, 500), after: s(b.after, 500) })),
+        skills: sa(r.skills, 15, 60),
+        warnings: sa(r.warnings, 6),
+      } as ToolOutputs[K];
     default:
       throw new Error('Bilinmeyen araç');
   }
@@ -102,4 +120,23 @@ export function sanitizeCv(raw: unknown): CvOutput {
     missingKeywords: sa(r.missingKeywords, 12, 60),
     tips: objs(r.tips, 6).map((t) => ({ title: s(t.title, 120), body: s(t.body, 500), gain: int(t.gain, 1, 20, 5) })),
   };
+}
+
+export function sanitizeAnlat(raw: unknown): AnlatOutput {
+  const r = o(raw);
+  const suggestions = objs(r.suggestions, 3)
+    .filter((x) => typeof x.target === 'string' && Object.prototype.hasOwnProperty.call(ANLAT_CATALOG, x.target))
+    .map((x) => {
+      const target = x.target as SuggestTarget;
+      const allowed = ANLAT_CATALOG[target].fields;
+      const pre = o(x.prefill);
+      const prefill: Record<string, string> = {};
+      for (const k of allowed) {
+        const v = s(pre[k], 600);
+        if (v) prefill[k] = v;
+      }
+      return { target, why: s(x.why, 300), prefill };
+    });
+  const q = s(r.question, 300);
+  return { understanding: s(r.understanding, 600), firstSteps: sa(r.firstSteps, 4, 300), suggestions, question: q || null };
 }

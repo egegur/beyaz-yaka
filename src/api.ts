@@ -1,4 +1,4 @@
-import type { AiResult, CvOutput, Me, ProvaOutput, ProvaTurn, ToolId, ToolOutputs, Win } from '../shared/types';
+import type { AiResult, AnlatOutput, CvOutput, HistoryItem, Me, ProvaMode, ProvaOutput, ProvaTurn, ToolId, ToolOutputs, Win } from '../shared/types';
 import { authHeaders } from './auth';
 
 export class ApiError extends Error {
@@ -53,7 +53,12 @@ export const api = {
     req<AiResult<ToolOutputs[K]>>('POST', `/api/tools/${id}`, input),
   latest: <K extends ToolId>(id: K) =>
     req<{ output: ToolOutputs[K]; createdAt: number } | null>('GET', `/api/tools/${id}`),
-  prova: (b: { scenario: string; counterpart: string; difficulty: string; history: ProvaTurn[] }) =>
+  revize: <K extends ToolId>(id: K, output: ToolOutputs[K], instruction: string) =>
+    req<AiResult<ToolOutputs[K]>>('POST', `/api/tools/${id}/revize`, { output, instruction }),
+  history: <K extends ToolId>(id: K) => req<HistoryItem<ToolOutputs[K]>[]>('GET', `/api/tools/${id}/gecmis`),
+  anlat: (text: string) => req<AiResult<AnlatOutput>>('POST', '/api/anlat', { text }),
+  feedback: (tool: string, useful: boolean, note?: string) => req('POST', '/api/feedback', { tool, useful, note }),
+  prova: (b: { scenario: string; counterpart: string; difficulty: string; history: ProvaTurn[]; mode?: ProvaMode; jobText?: string }) =>
     req<AiResult<ProvaOutput>>('POST', '/api/prova', b),
   cv: (cvText: string, jobText: string) => req<AiResult<CvOutput>>('POST', '/api/cv', { cvText, jobText }),
   report: (tool: string, reason: string, content: string) => req('POST', '/api/report', { tool, reason, content }),
